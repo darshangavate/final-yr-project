@@ -1,8 +1,9 @@
 # Architecture after cleanup
 
 The stack remains React 18 + Vite, FastAPI, Python, SQLite, React Leaflet,
-Shapely/PyProj and the existing numerical libraries. No ORM, framework migration,
-new UI library or replacement algorithms were introduced.
+Shapely/PyProj and the existing numerical libraries. Persistence uses SQLAlchemy
+Core with SQLite/PostgreSQL; numerical algorithms and the approved UI remain
+unchanged. See [backend ownership](../backend/README.md) for retained modules.
 
 ## Structure and ownership
 
@@ -18,7 +19,7 @@ backend/
   services/                      authentication, vendors, pilot_slots,
                                  navigation, responses, explanations,
                                  recommendation_context, pilot_access
-  repositories/database.py       existing SQLite schema and transactions
+  repositories/database.py       SQLAlchemy metadata and portable transactions
   geo/pilot_geometry.py          geographic generation and validation
   mcda_engine.py                 operational weighted MCDA
   allocation_optimizer.py        advisory Goal Programming
@@ -31,31 +32,27 @@ frontend/src/
     auth/                        login/OTP screens and authentication CSS
     admin/                       dashboard, tabs, map and view models
     vendor/                      portal, workspace hook, forms/maps/sections
-    recommendations/             research recommendation UI and evidence
-    zone-registry/               registry search and filters
     pilot-slots/                 single slot map, lifecycle, selection state
     navigation/                  routing/GPS hook and navigation utilities
-    research/                    overview, GIS/model insights, expert review
-  shared/                        UI, maps, utilities, hooks, research primitives
+  shared/                        UI, maps and utilities
   services/api.js                 one cookie-authenticated request client
   styles/tokens.css               global design tokens
   styles/foundation.css           ordered global/shared styling
   i18n/                          unchanged multilingual infrastructure
-  pages/ImplementationPages.jsx  compatibility exports
 research/mcda_baseline.py         separate historical MCDA implementation
 scripts/                         preprocessing, clustering, research CLIs
 app/expert_review.py              retained Streamlit review entry
-requirements/                    app, research, dev and verified constraints
+backend/requirements/            app, research, dev and verified constraints
 tests/                           backend workflows and architecture guardrails
 frontend/tests/                  browser-only fixtures and smoke runner
 data/ models/ reports/           preserved runtime/research assets
 docs/                            contracts, migration manifests and deployment
 ```
 
-The browser calls `services/api.js`, which retains cookie credentials and the
-local browser hostname on port 8000. FastAPI routers validate existing request
+The browser calls `services/api.js`, which retains cookie credentials and uses
+same-origin `/api` through Vite locally and Vercel in production. FastAPI routers validate request
 schemas and enforce session roles/ownership through security helpers. Services
-perform domain workflows and call the SQLite repository. Repository transaction
+perform domain workflows and call the SQLAlchemy repository. Repository transaction
 boundaries and capacity checks remain intact. Startup retains the original
 idempotent bootstrap; the refactor did not run it against the live database.
 
@@ -82,8 +79,9 @@ The former API is split across nine routers, schema modules and shared helpers.
 
 Frontend moves are enumerated in [frontend-moves.json](frontend-moves.json).
 Meaningful splits include vendor workspace state, navigation/GPS state, admin
-tab panels, recommendation maps/evidence and map lifecycle components. The shared
-data hook and primitives replace repeated request/loading implementations.
+tab panels, recommendation maps/evidence and map lifecycle components. Shared
+primitives handle repeated presentation. The unused generic data hook was
+removed after reference auditing; feature workspace hooks remain.
 
 Five global CSS entry points are consolidated in their previous declaration
 order, with provenance comments. Twenty exact duplicate rules and fifteen dead
@@ -106,8 +104,10 @@ tests/callers can still patch database/session bindings. New code should import
 the owning modules directly. This bridge is deliberate residual coupling, not a
 new dependency-injection framework.
 
-The complete OpenAPI document is locked against the original baseline. SQLite
-remains `data/operational/vendor_management.db`; saved pilot boundaries remain
+The original OpenAPI, asset and AST snapshots remain historical evidence;
+current v2 behavior has documented pre-existing differences. The local SQLite
+default remains `data/operational/vendor_management.db`; production requires an
+explicit existing `DATABASE_URL`. Saved pilot boundaries remain
 `data/pilot/lekha_nagar_boundaries.geojson`. Original files beneath `data`,
 `models` and `reports` have SHA-256 guards. Selected scientific function/class
 ASTs are compared with the original source backup, permitting import changes
@@ -115,8 +115,8 @@ without silently rewriting algorithm bodies.
 
 ## Remaining debt
 
-The shell retains state-driven navigation and history replacement; deep-link
-restoration is not a new feature of this cleanup. Some research and numerical
+The shell retains state-driven navigation, deep-link restoration and history
+replacement. Some research and numerical
 files remain large to preserve reproducibility. The compatibility context and
 ordered CSS overrides can be reduced later with focused behavior tests.
 SQLite deployment requires controlled writers, persistent storage and backups.

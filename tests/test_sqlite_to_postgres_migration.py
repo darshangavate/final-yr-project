@@ -2,6 +2,7 @@ import sqlite3
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 from scripts.migrate_sqlite_to_postgres import (
     build_diagnostics,
@@ -10,10 +11,16 @@ from scripts.migrate_sqlite_to_postgres import (
     parse_args,
     plan_table,
     values_equal,
+    target_engine,
 )
 
 
 class SQLiteToPostgresMigrationTests(unittest.TestCase):
+    def test_render_postgres_alias_uses_existing_driver_without_connecting(self):
+        with patch("scripts.migrate_sqlite_to_postgres.create_engine") as create:
+            target_engine("postgres://user:password@example.invalid/database")
+        create.assert_called_once_with("postgresql+psycopg://user:password@example.invalid/database", pool_pre_ping=True)
+
     def test_explicit_mode_is_required(self):
         with self.assertRaises(SystemExit):
             parse_args([])

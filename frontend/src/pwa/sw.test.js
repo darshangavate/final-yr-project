@@ -36,16 +36,17 @@ test("precache contains only explicit versioned assets, fetched without cookies"
 test("authenticated API reads and writes always go to the network and never enter caches", async () => {
   const sw=worker();await sw.event("install");
   for (const url of ["/api/auth/me","/api/vendors/me/profile-photo","/api/allocation-requests?status=ACTIVE","https://api.other.test/api/vendors/me/dashboard"]) {
-    const response=await sw.request(url);assert.match(await response.text(),/live response/);assert.equal(sw.network.at(-1).options.cache,"no-store");
+    assert.equal(sw.request(url),undefined,"API requests must bypass the worker");
   }
-  await sw.request("/api/allocation-requests",{method:"POST"});
+  assert.equal(sw.request("/api/allocation-requests",{method:"POST"}),undefined);
+  assert.equal(sw.network.length,2,"only precached assets may initiate worker fetches");
   assert.equal(sw.stores.get("vendormap-static-test").size,2);
 });
 test("offline navigation gets a generic static page rather than a cached private screen", async () => {
   const sw=worker({fail:true});await (await sw.caches.open("vendormap-static-test")).put(offline,new Response("Connection needed"));
   const response=await sw.request("/vendor/profile?request=private",{mode:"navigate"});
   assert.equal(await response.text(),"Connection needed");assert.deepEqual([...sw.stores.get("vendormap-static-test").keys()],[offline]);
-  await assert.rejects(sw.request("/api/vendors/me/dashboard"),/offline/);
+  assert.equal(sw.request("/api/vendors/me/dashboard"),undefined);
 });
 test("unknown assets, map tiles, profile images and authorized requests are not cached", async () => {
   const sw=worker();await sw.event("install");

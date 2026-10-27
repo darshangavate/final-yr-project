@@ -5,7 +5,7 @@ from backend.schemas.api import ActiveVendorAllocationResponse
 from backend.services.authentication import AuthError
 from backend.mcda_engine import DATA
 from backend.decision_policy import active_mcda_configuration
-from backend.geo.zone_locations import resolve_zone_locations
+from backend.services.zone_references import resolve_zone_locations
 from backend.services.eligibility import zone_ineligibility_reason
 from fastapi import Request as FastAPIRequest
 from fastapi import HTTPException

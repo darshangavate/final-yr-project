@@ -48,7 +48,8 @@ class AllocationRequestApiTests(unittest.TestCase):
             "vendor_id": vendor_id,
             "zone_id": zone_id or self.open_zones[0],
             "request_type": request_type,
-            "business_category": "food",
+            # These tests exercise capacity/lifecycle with several historical
+            # profiles; the API derives their actual category server-side.
             "preferred_division": "Nashik West",
             "notes": "Test request",
         }
@@ -103,7 +104,7 @@ class AllocationRequestApiTests(unittest.TestCase):
                 json=self.payload(vendor_id=f"V2024_{index:05d}", zone_id=zone_id),
             )
             self.assertEqual(response.status_code, 409)
-            self.assertIn("not open", response.json()["detail"])
+            self.assertIn("OFFICIAL_ZONE_NOT_FREE", response.json()["detail"])
 
     def test_closed_suspended_and_full_zones_are_rejected(self):
         for index, status in enumerate(("CLOSED", "SUSPENDED", "FULL"), start=10):
@@ -118,7 +119,7 @@ class AllocationRequestApiTests(unittest.TestCase):
                 json=self.payload(vendor_id=f"V2024_{index:05d}", zone_id=zone_id),
             )
             self.assertEqual(response.status_code, 409)
-            self.assertIn("not open", response.json()["detail"])
+            self.assertIn(f"ZONE_{status}", response.json()["detail"])
 
     def test_zero_available_capacity_is_rejected(self):
         zone_id = self.open_zones[3]
@@ -138,7 +139,7 @@ class AllocationRequestApiTests(unittest.TestCase):
             json=self.payload(vendor_id="V2024_00020", zone_id=zone_id),
         )
         self.assertEqual(response.status_code, 409)
-        self.assertIn("no available capacity", response.json()["detail"])
+        self.assertIn("ZONE_FULL", response.json()["detail"])
 
     def test_active_allocation_rules_for_new_and_relocation(self):
         self.insert_active_allocation("V2024_00030", self.open_zones[0])

@@ -66,7 +66,8 @@ self.addEventListener("fetch", event => {
   const request = event.request;
   const url = new URL(request.url);
   if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-    event.respondWith(fetch(request, {cache: "no-store"}));
+    // The API client already uses no-store. Let the browser send this request
+    // directly; a worker fetch adds an unnecessary second network initiator.
     return;
   }
   if (request.mode === "navigate" && url.origin === self.location.origin) {

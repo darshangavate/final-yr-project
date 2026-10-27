@@ -24,7 +24,7 @@ with closing(sqlite3.connect(dataset_path('database').resolve().as_uri()+'?mode=
         for row in source.execute('SELECT * FROM '+table):
             values = dict(row)
             if table == 'pilot_slots':
-                values.update(assigned_vendor_id=None, status='AVAILABLE')
+                values.update(assigned_vendor_id=None, status='AVAILABLE', pending_request_id=None, active_allocation_id=None)
             columns = list(values)
             target.execute(f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)}) ON CONFLICT DO NOTHING", list(values.values()))
     target.commit()

@@ -9,6 +9,7 @@
     "Reconnect revalidates the session and refetches the vendor workspace",
     "A waiting update preserves unsaved form state until explicit Reload; activation and reload preserve the authenticated session",
     "Logout cannot restore a cached vendor profile",
+    "Officer form login confirms the cookie; admin overview, pending applications, vendor directory and zones authorize; deep-link refresh persists and logout revokes the session",
     "No browser runtime exceptions"
   ],
   "errors": []

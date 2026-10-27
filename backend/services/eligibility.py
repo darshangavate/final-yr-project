@@ -9,6 +9,8 @@ def zone_ineligibility_reason(zone_type, live):
     if live["status"] != "OPEN":
         return "ZONE_" + live["status"]
     available = live["available_capacity"]
-    if available is not None and available <= 0:
+    if available is None:
+        return "CAPACITY_UNKNOWN"
+    if available <= 0:
         return "NO_AVAILABLE_CAPACITY"
     return None

@@ -203,8 +203,11 @@ class DevelopmentOtpProvider:
 
 
 def get_otp_provider() -> OtpProvider:
-    provider = get_auth_settings().otp_provider
+    settings = get_auth_settings()
+    provider = settings.otp_provider
     if provider == "development":
+        if settings.app_env == "production":
+            raise RuntimeError("Development OTP provider cannot deliver production OTPs")
         return DevelopmentOtpProvider()
     raise RuntimeError(f"Unsupported OTP_PROVIDER: {provider}")
 
@@ -219,6 +222,7 @@ def create_otp_challenge(
     provider: OtpProvider | None = None,
 ) -> dict[str, str]:
     normalized = normalize_indian_mobile(mobile)
+    delivery = provider or get_otp_provider()
     hashed_phone = phone_hmac(normalized)
     now_dt = datetime.now(timezone.utc)
     now = _timestamp(now_dt)
@@ -254,7 +258,7 @@ def create_otp_challenge(
                 now,
             ),
         )
-    (provider or get_otp_provider()).send_otp(normalized, otp)
+    delivery.send_otp(normalized, otp)
     return {"challenge_id": challenge_id, "next_step": "VERIFY_OTP"}
 
 

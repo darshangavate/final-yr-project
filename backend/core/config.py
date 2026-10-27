@@ -83,7 +83,7 @@ def get_database_backend() -> str:
         return "sqlite"
     if url.startswith("sqlite:"):
         return "sqlite"
-    if url.startswith(("postgresql:", "postgresql+psycopg:")):
+    if url.startswith(("postgres:", "postgresql:", "postgresql+psycopg:")):
         return "postgresql"
     raise ConfigurationError("DATABASE_URL must use SQLite or PostgreSQL")
 
@@ -141,7 +141,7 @@ def get_auth_settings() -> AuthSettings:
         raise ConfigurationError(
             "Missing required authentication configuration: " + ", ".join(missing)
         )
-    return AuthSettings(
+    settings = AuthSettings(
         app_env=_required_value("APP_ENV").strip().lower(),
         auth_hmac_secret=_required_value("AUTH_HMAC_SECRET"),
         session_cookie_secure=_boolean_value("SESSION_COOKIE_SECURE"),
@@ -150,6 +150,38 @@ def get_auth_settings() -> AuthSettings:
         nmc_admin_username=_required_value("NMC_ADMIN_USERNAME"),
         nmc_admin_password=_required_value("NMC_ADMIN_PASSWORD"),
     )
+    if settings.app_env == "production":
+        if not settings.session_cookie_secure:
+            raise ConfigurationError("Production requires SESSION_COOKIE_SECURE=true")
+        if settings.otp_debug:
+            raise ConfigurationError("Production requires OTP_DEBUG=false")
+        if allow_destructive_db_reset():
+            raise ConfigurationError("Production requires ALLOW_DESTRUCTIVE_DB_RESET=false")
+    return settings
+
+
+def validate_production_database(database_path: str | Path) -> None:
+    """Refuse an implicit/temporary production DB before bootstrap writes."""
+    if os.environ.get("APP_ENV", "").strip().lower() != "production":
+        return
+    if not get_database_url():
+        raise ConfigurationError("Production requires an explicit persistent DATABASE_URL")
+    from sqlalchemy.engine import make_url
+    value = str(database_path)
+    if isinstance(database_path, Path) or "://" not in value:
+        path = Path(value)
+    else:
+        url = make_url(value)
+        if not url.drivername.startswith("sqlite"):
+            return
+        path = Path(url.database or "")
+        if not url.database or url.database == ":memory:":
+            raise ConfigurationError("Production SQLite must use a persistent file")
+    if not path.is_absolute():
+        raise ConfigurationError("Production SQLite DATABASE_URL must use an absolute path on a persistent disk")
+    # Do not turn a wrong mount/path into a seemingly healthy empty database.
+    if not path.is_file():
+        raise ConfigurationError("Production SQLite database must already exist; verify its persistent disk and restore it before startup")
 
 
 def get_cors_origins() -> list[str]:

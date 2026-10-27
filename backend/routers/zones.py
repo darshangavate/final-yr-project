@@ -23,7 +23,7 @@ import json
 import csv
 import math
 from backend.decision_policy import load_base_weight_policy, active_mcda_configuration
-from backend.geo.zone_locations import resolve_zone_locations
+from backend.services.zone_references import resolve_zone_locations
 from backend.core.security import operational_error
 import pandas as pd
 from backend.core.security import request_session

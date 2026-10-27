@@ -42,5 +42,9 @@
   {
     "path": "frontend/src/ServiceTheme.css",
     "reason": "Consolidated in styles/foundation.css and styles/tokens.css; source declaration order retained. Not discarded."
+  },
+  {
+    "path": "frontend/src/shared/hooks/useApiData.js",
+    "reason": "Final readiness audit: no import, dynamic import, test or CLI caller references this hook. Its only named occurrence was its definition. The sole frontend import.meta.glob uses an explicit public dataset allowlist and cannot load hooks. Removed with production build and API/PWA regression verification; stale architecture prose corrected."
   }
 ]

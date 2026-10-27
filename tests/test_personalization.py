@@ -96,7 +96,10 @@ class RecommendationPersonalizationTests(unittest.TestCase):
         )
         for profile, factor, expected_multiplier in cases:
             with self.subTest(profile=profile):
-                result = derive_mcda_weights(profile)
+                # This is the original v1 policy contract. Active v2 blending
+                # and non-compounding controls have separate acceptance tests.
+                with patch("backend.decision_policy.active_mcda_configuration", return_value=None):
+                    result = derive_mcda_weights(profile)
                 self.assertAlmostEqual(result["multipliers"][factor], expected_multiplier, places=12)
                 self.assertGreater(result["final_weights"][factor], WEIGHTS[factor])
                 self.assertAlmostEqual(sum(result["final_weights"].values()), 1.0, places=15)

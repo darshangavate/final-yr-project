@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {apiRequest, deletePilotSlot, getAllocations, getCapacityPressure, getRecommendationAiExplanation, getRecommendations, getPilotRoute, getVendorRelocationRecommendations, savePilotGeometry} from "./api.js";
+import {apiRequest, deletePilotSlot, getAllocations, getCapacityPressure, getCurrentUser, loginAdmin, verifyVendorOtp, getRecommendationAiExplanation, getRecommendations, getPilotRoute, getVendorRelocationRecommendations, savePilotGeometry} from "./api.js";
 import {indexAiFactorExplanations} from "../features/vendor/viewModel.js";
 
 test("shared client includes the session cookie and preserves the endpoint", async t => {
@@ -113,6 +113,44 @@ test("shared client retains server error detail", async t => {
 });
 
 test("shared client reports malformed responses", async t => {
-  t.mock.method(globalThis, "fetch", async () => new Response("not JSON", {status: 502}));
-  await assert.rejects(apiRequest("/api/catalog"), /unreadable response \(502\)/);
+  t.mock.method(globalThis, "fetch", async () => new Response("not JSON", {status: 500}));
+  await assert.rejects(apiRequest("/api/catalog"), /unreadable response \(500\)/);
+});
+
+test("both logins verify the cookie with the shared role-aware me endpoint", async t => {
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    requests.push({url, options});
+    return new Response(JSON.stringify({authenticated:true, role:"ADMIN"}));
+  });
+  assert.equal((await loginAdmin("test-officer", "test-password")).role,"ADMIN");
+  await verifyVendorOtp("test-challenge", "123456");
+  assert.deepEqual(requests.map(({url}) => new URL(url).pathname), ["/api/auth/admin/login","/api/auth/me","/api/auth/vendor/verify-otp","/api/auth/me"]);
+  for (const {options} of requests) {assert.equal(options.credentials,"include");assert.equal(options.cache,"no-store");}
+});
+
+test("a successful login with a rejected session cookie never enters the workspace", async t => {
+  let calls = 0;
+  t.mock.method(globalThis,"fetch",async () => ++calls === 1 ? new Response('{"authenticated":true}') : new Response('{"detail":"Authentication required"}',{status:401}));
+  await assert.rejects(loginAdmin("test-officer","test-password"), error => error.status === 401 && /could not retain/.test(error.message));
+});
+
+test("concurrent session checks share a request and later checks revalidate", async t => {
+  const fetch = t.mock.method(globalThis,"fetch",async () => new Response('{"role":"ADMIN"}'));
+  await Promise.all([getCurrentUser(),getCurrentUser()]);
+  assert.equal(fetch.mock.callCount(),1);
+  await getCurrentUser();assert.equal(fetch.mock.callCount(),2);
+});
+
+test("401 expires the private workspace while 403 and server startup errors do not signal offline", async t => {
+  const events = [];
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis,"window");
+  Object.defineProperty(globalThis,"window",{configurable:true,value:{dispatchEvent:event=>events.push(event.type)}});
+  t.after(()=>{if(descriptor)Object.defineProperty(globalThis,"window",descriptor);else delete globalThis.window;});
+  for (const status of [401,403,503]) {
+    const mock = t.mock.method(globalThis,"fetch",async () => new Response("gateway page",{status}));
+    await assert.rejects(apiRequest("/api/admin/overview"),error => error.status === status && error.code !== "NETWORK_UNAVAILABLE");
+    mock.mock.restore();
+  }
+  assert.deepEqual(events,["vendormap:session-expired"]);
 });

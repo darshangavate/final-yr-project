@@ -2,6 +2,8 @@
 from backend.core.config import get_cors_origins
 from backend.core import context
 from backend.core.context import FastAPI, CORSMiddleware, lifespan
+from fastapi import Request
+from fastapi.responses import JSONResponse
 app = FastAPI(
     title=(
         "Nashik Vendor Zoning "
@@ -25,6 +27,26 @@ app.add_middleware(
         "Content-Type",
     ],
 )
+
+
+@app.middleware("http")
+async def private_api_responses(request: Request, call_next):
+    """Keep sessions/private data out of browser and reverse-proxy caches."""
+    is_api = request.url.path == "/api" or request.url.path.startswith("/api/")
+    origin = request.headers.get("origin")
+    # Preserve SameSite=Lax and reject browser writes from untrusted origins,
+    # including login CSRF. Browsers alone control Sec-Fetch-Site; retain LAN
+    # support when Vite forwards a same-origin request under a changed Host.
+    if (is_api and request.method not in {"GET", "HEAD", "OPTIONS"} and origin
+            and request.headers.get("sec-fetch-site") != "same-origin"
+            and origin not in {str(request.base_url).rstrip("/"), *get_cors_origins()}):
+        response = JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
+    else:
+        response = await call_next(request)
+    if is_api:
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 from backend.routers import health
 app.include_router(health.router)

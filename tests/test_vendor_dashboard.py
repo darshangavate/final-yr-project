@@ -18,6 +18,7 @@ from backend.database import (
     transaction,
 )
 from backend.vendor_service import register_vendor
+from operational_fixtures import copy_saved_geometry
 
 
 class VendorDashboardTests(unittest.TestCase):
@@ -25,6 +26,7 @@ class VendorDashboardTests(unittest.TestCase):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.database_path = Path(self.temp_directory.name) / "dashboard.db"
         initialize_database(self.database_path)
+        copy_saved_geometry(self.database_path)
         self.database_patch = patch.object(api, "DATABASE_PATH", self.database_path)
         self.database_patch.start()
         self.client = TestClient(api.app)
@@ -44,7 +46,7 @@ class VendorDashboardTests(unittest.TestCase):
             rows = connection.execute(
                 """SELECT zone_id FROM zone_live_status
                    WHERE status = 'OPEN'
-                     AND (available_capacity IS NULL OR available_capacity > 0)
+                     AND available_capacity > 0
                    ORDER BY zone_id LIMIT ?""",
                 (count,),
             ).fetchall()

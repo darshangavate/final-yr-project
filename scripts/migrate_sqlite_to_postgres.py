@@ -154,6 +154,8 @@ def open_source_read_only() -> sqlite3.Connection:
 
 
 def target_engine(database_url: str) -> Engine:
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url.removeprefix("postgres://")
     normalized = (
         "postgresql+psycopg://" + database_url.removeprefix("postgresql://")
         if database_url.startswith("postgresql://")

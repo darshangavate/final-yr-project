@@ -31,6 +31,22 @@ class OperationalDatabaseTests(unittest.TestCase):
         self.assertEqual(database_backend(postgres_url), "postgresql")
         self.assertEqual(get_engine(postgres_url).dialect.name, "postgresql")
 
+    def test_connection_context_commits_and_closes_on_success(self):
+        with connect(self.database_path) as connection:
+            connection.execute("UPDATE zone_live_status SET verified_by = 'context-test'")
+        self.assertTrue(connection.raw.closed)
+        with closing(connect(self.database_path)) as restored:
+            self.assertEqual(restored.execute("SELECT verified_by FROM zone_live_status LIMIT 1").fetchone()[0], "context-test")
+
+    def test_connection_context_rolls_back_and_closes_on_error(self):
+        with self.assertRaisesRegex(RuntimeError, "abort workflow"):
+            with connect(self.database_path) as connection:
+                connection.execute("UPDATE zone_live_status SET verified_by = 'must-rollback'")
+                raise RuntimeError("abort workflow")
+        self.assertTrue(connection.raw.closed)
+        with closing(connect(self.database_path)) as restored:
+            self.assertEqual(restored.execute("SELECT COUNT(*) FROM zone_live_status WHERE verified_by = 'must-rollback'").fetchone()[0], 0)
+
     def test_all_official_zones_are_seeded_once(self):
         with OFFICIAL_ZONES_PATH.open(newline="", encoding="utf-8-sig") as source:
             official_count = sum(1 for _ in csv.DictReader(source))

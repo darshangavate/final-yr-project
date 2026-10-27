@@ -44,6 +44,8 @@ export default function ImplementationApp() {
   const [session, setSession] = useState(null);
   const [logoutError, setLogoutError] = useState("");
   const [checking, setChecking] = useState(true);
+  const [sessionError, setSessionError] = useState("");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [page, setPage] = useState("vendor-dashboard");
   const [recommendationZoneId, setRecommendationZoneId] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -85,10 +87,23 @@ export default function ImplementationApp() {
     window.history.replaceState({}, "", admin ? "/admin" : "/vendor");
   };
   useEffect(() => {
-    getCurrentUser().then(next => applySession(next, {preserveRoute: true})).catch(error => {
+    let active = true;
+    setChecking(true); setSessionError("");
+    getCurrentUser().then(next => {if (active) applySession(next, {preserveRoute: true});}).catch(error => {
+      if (!active) return;
       if (error.code === "NETWORK_UNAVAILABLE") return;
-      setSession(null); window.history.replaceState({}, "", "/login");
-    }).finally(() => setChecking(false));
+      if (error.status === 401) {setSession(null); window.history.replaceState({}, "", "/login");}
+      else setSessionError(error.message);
+    }).finally(() => {if (active) setChecking(false);});
+    return () => {active = false;};
+  }, [sessionAttempt]);
+  useEffect(() => {
+    const expired = () => {
+      setSession(null); setSessionError(""); setNotificationsOpen(false);
+      window.history.replaceState({}, "", "/login");
+    };
+    window.addEventListener("vendormap:session-expired", expired);
+    return () => window.removeEventListener("vendormap:session-expired", expired);
   }, []);
   useEffect(() => {
     const handlePopState = () => {
@@ -129,6 +144,7 @@ export default function ImplementationApp() {
     window.history.replaceState({}, "", VENDOR_PATHS["vendor-recommendations"]);
   };
   if (checking) return <div className="auth-loading"><Building2 size={28}/><span>{t("common.loading")}</span></div>;
+  if (sessionError) return <main className="auth-loading"><p role="alert">{sessionError}</p><button onClick={() => setSessionAttempt(value => value + 1)}>{t("pwa.retry")}</button></main>;
   if (!session) return <AuthLanding onAuthenticated={applySession}/>;
 
   const onboarding = session.role === "NEW_VENDOR_ONBOARDING";

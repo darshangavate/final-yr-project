@@ -25,7 +25,7 @@ From the repository root, create a virtual environment and install the Python de
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r backend/requirements.txt
 ```
 
 Then, after configuring the environment, initialize the local database:
@@ -64,7 +64,7 @@ The frontend listens on all network interfaces and forwards `/api` requests to F
 
 Leave `VITE_API_BASE` empty or unset in frontend environment files. An explicit `http://localhost:8000` or `http://127.0.0.1:8000` points to the visiting device and breaks LAN access. If FastAPI runs on a different port, set `API_PROXY_TARGET` in `frontend/.env.local` and restart Vite. `npm run preview` also supports the proxy after a production build.
 
-If the Network URL itself cannot be reached, allow Node.js through Windows Firewall on your private network and confirm both devices are on the same network without client isolation. For production hosting, configure the host's `/api` reverse proxy or set `VITE_API_BASE` and explicit backend CORS origins for the deployed API.
+If the Network URL itself cannot be reached, allow Node.js through Windows Firewall on your private network and confirm both devices are on the same network without client isolation. For Vercel/Render hosting, leave `VITE_API_BASE` empty and use the `/api` reverse proxy in `frontend/vercel.json`; see [deployment](docs/deployment.md) for hosting settings and persistence requirements.
 
 ## Install VendorMap as a PWA
 
@@ -79,7 +79,7 @@ Keep FastAPI running. Preview forwards `/api` to the local backend. Desktop inst
 
 Supported browsers receive a dismissible Install action after their native installability event. On iPhone/iPad, the app provides Share → Add to Home Screen guidance; it is hidden when already running standalone. No background push service or new notification permissions were added: existing in-app notifications remain unchanged.
 
-The worker caches only an explicit build-generated allowlist of fingerprinted JS, CSS, logo assets and a fingerprinted generic offline page. API requests use `cache: no-store` in both the client and worker. Authenticated HTML, profiles, photos, allocations, tokens, map tiles and navigation URLs are never stored in Cache Storage. Losing connectivity removes the in-memory workspace; reconnecting revalidates the session and reloads current data. Offline writes are not queued or replayed.
+The worker caches only an explicit build-generated allowlist of fingerprinted JS, CSS, logo assets and a fingerprinted generic offline page. API requests bypass the worker and use `cache: no-store` in the client; the server also marks API responses private and non-cacheable. Authenticated HTML, profiles, photos, allocations, tokens, map tiles and navigation URLs are never stored in Cache Storage. Losing connectivity removes the in-memory workspace; reconnecting revalidates the session and reloads current data. Offline writes are not queued or replayed.
 
 Updates wait for a Reload action or for older app windows to close. Old immutable chunks remain available to older open windows; once a sole current-build window confirms readiness, obsolete VendorMap caches are removed. Session cookies and language preferences are preserved. No forced reload interrupts an open form.
 

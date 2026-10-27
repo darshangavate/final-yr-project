@@ -56,7 +56,7 @@ class AdminAllocationWorkflowTests(unittest.TestCase):
                 "vendor_id": vendor_id,
                 "zone_id": zone_id,
                 "request_type": request_type,
-                "business_category": "food",
+                # Category comes from the selected vendor's actual profile.
                 "preferred_division": "Nashik East",
             },
         )
@@ -151,7 +151,7 @@ class AdminAllocationWorkflowTests(unittest.TestCase):
             json={"approved_by": "admin_01"},
         )
         self.assertEqual(rejected.status_code, 409)
-        self.assertIn("no available capacity", rejected.json()["detail"])
+        self.assertIn("ZONE_FULL", rejected.json()["detail"])
 
     def test_rejection_changes_no_occupancy(self):
         zone_id = self.open_zones[2]

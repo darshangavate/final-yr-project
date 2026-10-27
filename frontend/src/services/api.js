@@ -2,7 +2,7 @@
 // so LAN devices do not need access to the backend's localhost-only port.
 // A deployment with a separate API may explicitly set VITE_API_BASE.
 const LOCAL_API_BASE = typeof window === "undefined" ? "http://127.0.0.1:8000" : "";
-const API_BASE = (import.meta.env?.VITE_API_BASE || LOCAL_API_BASE).replace(/\/$/, "");
+const API_BASE = (import.meta.env?.VITE_API_BASE?.trim() || LOCAL_API_BASE).replace(/\/$/, "");
 
 export async function apiRequest(path, options = {}) {
   const unavailable = () => {
@@ -19,12 +19,20 @@ export async function apiRequest(path, options = {}) {
     if (cause?.name === "AbortError") throw cause;
     throw unavailable();
   }
+  if (response.status === 401 && !path.startsWith("/api/auth/")) {
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") window.dispatchEvent(new Event("vendormap:session-expired"));
+  }
   if (response.status === 204) return null;
   let body;
   try {
     body = await response.json();
   } catch {
-    const error = new Error(`The service returned an unreadable response (${response.status}).`); error.status = response.status; throw error;
+    const message = [502, 503, 504].includes(response.status)
+      ? "The service is starting or temporarily unavailable. Wait a moment and try again."
+      : response.status === 401 ? "Your session has expired. Please sign in again."
+      : response.status === 403 ? "You do not have permission to perform this action."
+      : `The service returned an unreadable response (${response.status}).`;
+    const error = new Error(message); error.status = response.status; throw error;
   }
   if (!response.ok) {
     const detail = typeof body.detail === "string" ? body.detail : "The request could not be completed.";
@@ -85,11 +93,27 @@ export const cancelAllocationRequest = requestId =>
 export const getZoneGeometry = signal => apiRequest("/api/zones/geometry", {signal});
 export const requestVendorOtp = mobile =>
   apiRequest("/api/auth/vendor/request-otp", jsonOptions("POST", {mobile}));
+// Confirm that the browser sends the session cookie back before entering a
+// protected workspace. A 200 login response alone cannot establish this.
+const establishSession = async (path, body) => {
+  await apiRequest(path, jsonOptions("POST", body));
+  try {return await apiRequest("/api/auth/me");}
+  catch (error) {
+    if (error.status === 401) error.message = "The browser could not retain your session. Enable cookies and try again.";
+    throw error;
+  }
+};
 export const verifyVendorOtp = (challengeId, otp) =>
-  apiRequest("/api/auth/vendor/verify-otp", jsonOptions("POST", {challenge_id: challengeId, otp}));
+  establishSession("/api/auth/vendor/verify-otp", {challenge_id: challengeId, otp});
 export const loginAdmin = (username, password) =>
-  apiRequest("/api/auth/admin/login", jsonOptions("POST", {username, password}));
-export const getCurrentUser = () => apiRequest("/api/auth/me");
+  establishSession("/api/auth/admin/login", {username, password});
+let currentUserRequest;
+export const getCurrentUser = () => {
+  // Share only an in-flight check (including StrictMode's development mount).
+  // Never cache an identity across logout, reconnect or subsequent refreshes.
+  if (!currentUserRequest) currentUserRequest = apiRequest("/api/auth/me").finally(() => {currentUserRequest = null;});
+  return currentUserRequest;
+};
 export const logout = () => apiRequest("/api/auth/logout", {method: "POST"});
 export const getAdminOverview = signal => apiRequest("/api/admin/overview", {signal});
 export const getAllocationRequests = (status = "", signal) =>

@@ -11,6 +11,7 @@ import backend.api as api
 from backend.database import connect, initialize_database, utc_now
 from backend.mcda_engine import CATEGORIES, derive_mcda_weights, recommend
 from backend.vendor_service import HISTORICAL_VENDOR_PATH
+from backend.services import vendors as vendor_service
 
 
 class OperationalVendorRegistryTests(unittest.TestCase):
@@ -111,12 +112,19 @@ class OperationalVendorRegistryTests(unittest.TestCase):
 
     def test_historical_vendor_resolves_and_receives_overlay_without_csv_change(self):
         before_hash = hashlib.sha256(HISTORICAL_VENDOR_PATH.read_bytes()).hexdigest()
+        # Test the optional identity overlay using synthetic metadata, rather
+        # than pinning a private person's name from a mutable source CSV.
+        identity_patch = patch.object(vendor_service, "_historical_identity_map", return_value={
+            "V2024_00001": {"full_name":"Synthetic Historical Vendor", "business_name":None},
+        })
+        identity_patch.start()
+        self.addCleanup(identity_patch.stop)
         historical = self.client.get("/api/vendors/V2024_00001")
         self.assertEqual(historical.status_code, 200)
         original = historical.json()
         self.assertEqual(original["vendor_type"], "EXISTING_IMPORTED")
         self.assertIsNone(original["application_vendor_id"])
-        self.assertEqual(original["full_name"], "Anjala Mahesh Jagtap")
+        self.assertEqual(original["full_name"], "Synthetic Historical Vendor")
         self.assertIsNone(original["business_name"])
         self.assertEqual(original["priority_profile"], "BALANCED")
         self.assertIsNone(original["created_at"])

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import backend.api as api
 from backend.database import connect, initialize_database
+from operational_fixtures import copy_saved_geometry
 
 
 class AdminDashboardApiTests(unittest.TestCase):
@@ -16,6 +17,7 @@ class AdminDashboardApiTests(unittest.TestCase):
         self.temp_directory = tempfile.TemporaryDirectory()
         self.database_path = Path(self.temp_directory.name) / "operational" / "admin.db"
         initialize_database(self.database_path)
+        copy_saved_geometry(self.database_path)
         self.database_patch = patch.object(api, "DATABASE_PATH", self.database_path)
         self.database_patch.start()
         self.auth_patch = patch.object(api, "AUTH_TEST_BYPASS", True)

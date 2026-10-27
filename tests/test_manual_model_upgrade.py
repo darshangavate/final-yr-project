@@ -2,13 +2,13 @@
 import copy
 import importlib
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+from sqlalchemy.exc import IntegrityError
 from fastapi.testclient import TestClient
 from sklearn.metrics import adjusted_rand_score
 
@@ -21,6 +21,7 @@ from backend.application import app
 from backend.core import context
 from backend.services import vendors
 from backend.routers import recommendations as recommendation_router, zones as zone_router, vendors as vendor_router
+from operational_fixtures import copy_saved_geometry
 
 VERSION = ROOT / "data/model/versions/manual-142-v2"
 
@@ -49,20 +50,7 @@ def v2(monkeypatch):
 def workspace(v2, tmp_path, monkeypatch):
     path = tmp_path / "operational.db"
     db.initialize_database(path)
-    # Copy saved geometry only, without identities or real operational activity.
-    source = sqlite3.connect(dataset_path("database").resolve().as_uri() + "?mode=ro", uri=True)
-    source.row_factory = sqlite3.Row
-    with db.connect(path) as target:
-        for row in source.execute("SELECT * FROM pilot_slot_layouts"):
-            values = dict(row)
-            cols = list(values)
-            target.execute(f"INSERT INTO pilot_slot_layouts ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})", list(values.values()))
-        for row in source.execute("SELECT * FROM pilot_slots WHERE is_deleted=0"):
-            values = dict(row)
-            values.update(assigned_vendor_id=None, status="AVAILABLE")
-            cols = list(values)
-            target.execute(f"INSERT INTO pilot_slots ({','.join(cols)}) VALUES ({','.join('?' for _ in cols)})", list(values.values()))
-    source.close()
+    copy_saved_geometry(path)
     vendor = db.create_operational_vendor({"business_category":"food", "preferred_division":None}, path)
     monkeypatch.setattr(context, "DATABASE_PATH", path)
     monkeypatch.setattr(context, "get_session", lambda *args, **kwargs:{"role":"VENDOR", "vendor_id":vendor["vendor_id"], "session_id":"DISPOSABLE"})
@@ -140,7 +128,10 @@ def test_top_three_all_zones_locality_and_own_map(workspace, monkeypatch):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["official_free_zone_count"] == 166
-    assert body["eligible_scoreable_count"] == 146
+    # NE_F_003 has unknown official capacity: it remains model-scoreable but
+    # cannot be offered as an operationally available location.
+    assert body["eligible_scoreable_count"] == 145
+    assert any(row["zone_id"] == "NE_F_003" for row in body["ineligible_zones"])
     assert body["eligible_unscorable_count"] == 20
     assert len(body["recommendations"]) == 3
     assert body["remaining_recommendations"][0]["rank"] == 4
@@ -248,7 +239,7 @@ def test_approval_rechecks_capacity_and_relocation_rollback(workspace):
     request = db.create_allocation_request(vendor_id,target,"RELOCATION",business_category="food",database_path=path)
     with db.connect(path) as connection:
         connection.execute("CREATE TRIGGER fail_relocation BEFORE INSERT ON allocations BEGIN SELECT RAISE(ABORT, 'disposable failure'); END")
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(IntegrityError):
         db.approve_allocation_request(request["request_id"],"DISPOSABLE_ADMIN",database_path=path)
     with db.connect(path) as connection:
         assert connection.execute("SELECT assigned_vendor_id FROM pilot_slots WHERE zone_id='NN_F_013' AND slot_id='S001'").fetchone()[0] == vendor_id
@@ -319,7 +310,8 @@ def test_saved_preferences_refresh_rankings_and_contributions(workspace):
             assert all(row["zone_division"] == division for row in ranked)
             assert body["strict_division_filter_applied"] is True
         else:
-            assert len(ranked) == 146 and len(body["eligible_unscorable_zones"]) == 20
+            assert len(ranked) == 145 and len(body["eligible_unscorable_zones"]) == 20
+            assert "NE_F_003" not in {row["zone_id"] for row in ranked}
         for row in ranked:
             available = [factor for factor in row["factors"] if factor["score"] is not None]
             denominator = sum(weights[factor["key"]] for factor in available)
